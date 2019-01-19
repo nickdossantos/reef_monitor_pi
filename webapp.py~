@@ -1,0 +1,83 @@
+# Raspberry Pi SQLite Database Sensor Readings pt. 3
+# Basic flask application that uses flask-admin to generate handy web interfaces
+# to manipulate the sensor config and readings from the database.
+# Author: Tony DiCola
+# License: Public Domain
+from flask import Flask
+from flask_admin import Admin
+from flask_admin.contrib.peewee import ModelView
+
+import model
+
+# Create a basic flask app.
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'mosfet'  # You should probably change this to a random value!
+
+data = model.Data()
+
+# Add an admin view for the Peewee ORM-based DHT sensor and sensor reading models.
+admin = Admin(app, name='Reef Admin Page', template_mode='bootstrap3', url='/')
+admin.add_view(ModelView(model.User))
+admin.add_view(ModelView(model.Device))
+admin.add_view(ModelView(model.Sensor))
+
+
+@app.route("/api/device_status", methods=['POST'])
+def get_status():
+	import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+	query = data.get_devices()
+	print "about to print query"
+	print query
+	response = {}
+	for device in query:
+		device_status = GPIO.input(device['pin'])
+		if device_status == 1: 
+			device_status = True
+		else: 
+			device_status = False
+		device_obj = {'device':device['identifier'], 'status':device_status}
+		response.append(device_obj)
+	
+	return response
+
+@app.route("/api/turn_off_relay", methods=['POST'])
+def turn_off_power():
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+ 
+        mode = GPIO.getmode()
+        print mode
+
+
+        GPIO.setwarnings(False)
+
+        RELAIS_1_GPIO = 26
+        GPIO.setup(RELAIS_1_GPIO, GPIO.OUT) # GPIO Assign mode
+
+        print GPIO.input(26)
+
+        GPIO.output(RELAIS_1_GPIO, GPIO.LOW) # off
+        print GPIO.input(26)
+        return "it is off"
+
+@app.route("/api/turn_on_relay", methods=['POST'])
+def turn_on_power():
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+ 
+        mode = GPIO.getmode()
+        print mode
+
+
+        GPIO.setwarnings(False)
+
+        RELAIS_1_GPIO = 26
+        GPIO.setup(RELAIS_1_GPIO, GPIO.OUT) # GPIO Assign mode
+
+        print GPIO.input(26)
+
+        GPIO.output(RELAIS_1_GPIO, GPIO.HIGH) # on
+
+        print GPIO.input(26)
+        return "it is on"
