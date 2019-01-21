@@ -26,8 +26,6 @@ def get_status():
         	GPIO.setmode(GPIO.BCM)
 		response = []
 		for device in data.get_devices():
-			print device
-			print device.name
       			GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
 			device_status = GPIO.input(device.pin)
 			if device_status == 1: 
@@ -53,25 +51,22 @@ def get_termperature_reading():
 
 
 @app.route("/api/turn_on_device", methods=["POST"])
-def turn_on_device_jwt():
+def turn_on_device():
 	try:
 		token = request.args.get('token')
-		print token
        	 	decoded = jwt.decode(token, 'iliketurtles', algorithms=['HS256'])
-		print decoded
 		auth_token = decoded['auth_token']
 		identifier = decoded['identifier']
 		if token and identifier:
 			user = data.find_user(auth_token)
                 	device = data.find_device(identifier)
-			print user.name
 	                GPIO.setmode(GPIO.BCM)
         	
                 	GPIO.setwarnings(False)
 
                 	GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
 
-               		 GPIO.output(device.pin, GPIO.HIGH) # on  
+               		GPIO.output(device.pin, GPIO.HIGH) # on  
 
                		return get_status()
 
@@ -82,19 +77,15 @@ def turn_on_device_jwt():
                 return e.to_json
 	
 @app.route("/api/turn_off_device", methods=["POST"])
-def turn_off_device_jwt():
+def turn_off_device():
 	try:
         	token = request.args.get('token')
-        	print token
         	decoded = jwt.decode(token, 'iliketurtles', algorithms=['HS256'])
-        	print decoded
         	auth_token = decoded['auth_token']
         	identifier = decoded['identifier']
         	if token and identifier:
                 	user = data.find_user(auth_token)
                 	device = data.find_device(identifier)
-                	print user.name
-                	print device.identifier
                 	GPIO.setmode(GPIO.BCM)
         
                 	GPIO.setwarnings(False)
