@@ -20,7 +20,7 @@ class TempSensor(object):
        	 	}
         	encoded_jwt = jwt.encode(data, 'iliketurtles', algorithm='HS256')
        	 	print encoded_jwt
-        	r = requests.post(url = self.API_ENDPOINT + encoded_jwt)
+        	r = requests.post(url = api_endpoint + "api/readings")
         	print data
 
 	def sensor(self):

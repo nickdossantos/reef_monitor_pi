@@ -5,17 +5,15 @@ from flask_admin import Admin
 from flask_admin.contrib.peewee import ModelView
 from flask import jsonify
 import RPi.GPIO as GPIO
+from temperature import TempSensor
 import jwt
 
 import model
-
-# Create a basic flask app.
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'mosfet'  # You should probably change this to a random value!
+app.config['SECRET_KEY'] = 'nickjds' 
 
 data = model.Data()
 
-# Add an admin view for the Peewee ORM-based DHT sensor and sensor reading models.
 admin = Admin(app, name='Reef Admin Page', template_mode='bootstrap3', url='/')
 admin.add_view(ModelView(model.User))
 admin.add_view(ModelView(model.Device))
@@ -42,73 +40,74 @@ def get_status():
 		print("there was an error")
 	return jsonify(response)
 
-@app.route("/api/turn_off_relay", methods=['POST'])
-def turn_off_power():
-        GPIO.setmode(GPIO.BCM)
- 
-        mode = GPIO.getmode()
-        print mode
-
-
-        GPIO.setwarnings(False)
-
-        RELAIS_1_GPIO = 26
-        GPIO.setup(RELAIS_1_GPIO, GPIO.OUT) # GPIO Assign mode
-
-        print GPIO.input(26)
-
-        GPIO.output(RELAIS_1_GPIO, GPIO.LOW) # off
-        print GPIO.input(26)
-        return get_status()
-
-@app.route("/api/turn_on_relay", methods=['POST'])
-def turn_on_power():
-        import RPi.GPIO as GPIO
-        GPIO.setmode(GPIO.BCM)
- 
-        mode = GPIO.getmode()
-
-        GPIO.setwarnings(False)
-
-        RELAIS_1_GPIO = 26
-        GPIO.setup(RELAIS_1_GPIO, GPIO.OUT) # GPIO Assign mode
-
-        GPIO.output(RELAIS_1_GPIO, GPIO.HIGH) # on
-
-        return get_status()
-
-@app.route("/api/turn_off_device", methods=["POST"])
-def turn_off_device():
-	auth_token = request.args.get('auth_token')
-	identifier = request.args.get('identifier')	
-
-	user = data.find_user('f6db0eaff9fbedd038a225972eafd746')
-	device = data.find_device('kdnxo1d')
-
-	GPIO.setmode(GPIO.BCM)
-        
-	GPIO.setwarnings(False)
-
-        GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
-
-        GPIO.output(device.pin, GPIO.LOW) # off
-	return get_status()
+@app.route("/api/get_temperature_reading", methods=['POST'])
+def get_termperature_reading():
+	user = data.find_user(request.args.get('auth_token'))
+	if user:
+		temp = TempSensor()
+		sensor = temp.sensor()
+		post = temp.post_reading(sensor, user.api_endpoint)
+		return "it posted"
+	else: 
+		return "user could not be found"
 
 
 @app.route("/api/turn_on_device", methods=["POST"])
-def turn_on_device():
-        auth_token = request.args.get('auth_token')
-        identifier = request.args.get('identifier')     
+def turn_on_device_jwt():
+	try:
+		token = request.args.get('token')
+		print token
+       	 	decoded = jwt.decode(token, 'iliketurtles', algorithms=['HS256'])
+		print decoded
+		auth_token = decoded['auth_token']
+		identifier = decoded['identifier']
+		if token and identifier:
+			user = data.find_user(auth_token)
+                	device = data.find_device(identifier)
+			print user.name
+	                GPIO.setmode(GPIO.BCM)
+        	
+                	GPIO.setwarnings(False)
 
-        user = data.find_user('f6db0eaff9fbedd038a225972eafd746')
-        device = data.find_device('kdnxo1d')
+                	GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
 
-        GPIO.setmode(GPIO.BCM)
+               		 GPIO.output(device.pin, GPIO.HIGH) # on  
+
+               		return get_status()
+
+		else:
+			return "Could not find a user or device with information provided"
+
+        except IOError as e:
+                return e.to_json
+	
+@app.route("/api/turn_off_device", methods=["POST"])
+def turn_off_device_jwt():
+	try:
+        	token = request.args.get('token')
+        	print token
+        	decoded = jwt.decode(token, 'iliketurtles', algorithms=['HS256'])
+        	print decoded
+        	auth_token = decoded['auth_token']
+        	identifier = decoded['identifier']
+        	if token and identifier:
+                	user = data.find_user(auth_token)
+                	device = data.find_device(identifier)
+                	print user.name
+                	print device.identifier
+                	GPIO.setmode(GPIO.BCM)
         
-        GPIO.setwarnings(False)
+                	GPIO.setwarnings(False)
 
-        GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
+                	GPIO.setup(device.pin, GPIO.OUT) # GPIO Assign mode
 
-        GPIO.output(device.pin, GPIO.HIGH) # on  
+                	GPIO.output(device.pin, GPIO.LOW) # off  
 
-        return get_status()
+                	return get_status()
+
+        	else:
+                	return "Could not find a user or device with information provided"
+
+        	return "I am done"
+	except IOError as e:
+		return e.to_json
