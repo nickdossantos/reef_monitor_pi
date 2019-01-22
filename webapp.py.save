@@ -61,7 +61,7 @@ def get_termperature_reading():
         if user:
                 temp = TempSensor()
                 sensor = temp.sensor()
-                return jsonify(temp.get_reading())
+                return jsonify(temp.get_reading())≈∑
         else: 
                 return "user could not be found"
 

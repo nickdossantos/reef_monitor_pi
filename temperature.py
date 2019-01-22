@@ -10,18 +10,30 @@ class TempSensor(object):
 	def __init__(self):
 		hello = "hello"
 
-	def post_reading(self, ds18b20, api_endpoint):
-        	temp = self.read(ds18b20)[1]
-        	print "Current temperature : %0.3f F" % temp
-        	data = {'value':temp,
-        	'sensor':'UhchNqkwJ9w8',
-        	'user': 'pxHdcwIYrh6B',
+	def sensor(self):
+    		for i in os.listdir('/sys/bus/w1/devices'):
+        		if i != 'w1_bus_master1':
+            			ds18b20 = i
+    		return ds18b20
+	def get_reading(self):
+		temps = self.read(self.sensor())
+		temp_c = temps[0]
+        	temp_f = temps[1]
+        	data = {'farenheit':temp_f,
+		'celcius': temp_c,
         	'date': datetime.datetime.now().strftime(self.dateString)
        	 	}
-        	encoded_jwt = jwt.encode(data, 'iliketurtles', algorithm='HS256')
-       	 	print encoded_jwt
-        	r = requests.post(url = self.API_ENDPOINT + encoded_jwt)
-        	print data
+        	return data
+
+	def send_temperature():
+		temp = self.read(ds18b20)[1]
+                data = {'value':temp,
+                'sensor':'UhchNqkwJ9w8',
+                'user': 'pxHdcwIYrh6B',
+                'date': datetime.datetime.now().strftime(self.dateString)
+                }
+                encoded_jwt = jwt.encode(data, 'iliketurtles', algorithm='HS256')
+                r = requests.post(url = self.API_ENDPOINT + "get_temp_reading?token=" + encoded_jwt)	
 
 	def sensor(self):
     		for i in os.listdir('/sys/bus/w1/devices'):
