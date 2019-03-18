@@ -1,1 +1,8 @@
-<h2>This is the index</h2>
+<html>
+   <body>
+      <form action = "{{ url_for('verify_pin') }}" method = "POST">
+         <p>Pin Number: <input type = "text" name = "pin_number" /></p>
+         <p><input type = "submit" value = "submit" /></p>
+      </form>
+   </body>
+</html> 
