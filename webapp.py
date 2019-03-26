@@ -8,12 +8,13 @@ from dotenv import load_dotenv
 from temperature import TempSensor
 import json
 import requests
-
 import RPi.GPIO as GPIO
 
 import jwt
 import os
 import model
+
+import sqlite3
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'nickjds' 
@@ -24,26 +25,54 @@ def index():
 
 @app.route("/verify_pin", methods=['POST'])
 def verify_pin():
-	#post pin to web app verifying the user.
-	#get response if user is already verified return message, 
-	#if user was veryified send sucess.
-	#if there was an error print the error.
 	pin_number = request.form['pin_number']
-	URL = "http://1992cfd8.ngrok.io/api/verify_pin_number/?pin_number=" + pin_number
-	# defining a params dict for the parameters to be sent to the API 
-	PARAMS = {'pin_number':pin_number} 
-  
-	# sending get request and saving the response as response object 
+	URL = "http://ffa1a4bd.ngrok.io/api/verify_pin_number/?pin_number=" + pin_number + "&api_endpoint=me.endpnt" 
+
 	r = requests.post(URL)
 	response = json.loads(r.text)
-	print response
-	print "this is r"
+	if response['status'] == "SUCCESS":
+		conn = sqlite3.connect('reef_monitor.db')
+                cur = conn.cursor()
+                cur.execute("SELECT token from users where token = ? limit 1", (response['token'],))
+                rows = cur.fetchall()
+		if any(rows): 
+			object = rows[0]
+			conn.execute("UPDATE users  SET token = ? WHERE id = ?", (response['token'], object[0]))
+			conn.close()
+		else:
+        		c = conn.cursor()
+			c.execute("INSERT INTO users (token) values (?)", (response['token'],))
+			conn.commit()
+			conn.close()
 	return str(response['status'])
+
+@app.route("/api/sync_sensors/all", methods=['POST'])
+def sync_sensors():
+	try:
+		decoded = jwt.decode(request.args.get('token'), 'iliketurtles', algorithms=['HS256'])
+		conn = sqlite3.connect('reef_monitor.db')
+		cur = conn.cursor()
+		cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
+		rows = cur.fetchall()
+		if any(rows):
+			cur.execute("UPDATE users SET sensors  = ? WHERE token = ?", (str(json.dumps(decoded['sensors'])), decoded['auth_token']))
+			conn.commit()
+			conn.close()
+		return str(decoded)
+		conn.close()
+	except IOError as e:
+                return e.to_json
+
 @app.route("/api/device_status/all", methods=['POST'])
 def get_status_all():
         try:
 		decoded = jwt.decode(request.args.get('token'), 'iliketurtles', algorithms=['HS256'])
-                if decoded['auth_token'] == os.getenv("AUTH_TOKEN"):
+		conn = sqlite3.connect('reef_monitor.db')
+                cur = conn.cursor()
+                cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
+                rows = cur.fetchall()
+		conn.close()
+                if any(rows):
                 	GPIO.setmode(GPIO.BCM)
                 	response = []
                 	for device in decoded['devices']:
@@ -78,9 +107,13 @@ def get_status(devices):
 
 @app.route("/api/get_temperature_reading", methods=['GET'])
 def get_termperature_reading():
-        load_dotenv()
         decoded = jwt.decode(request.args.get('token'), 'iliketurtles', algorithms=['HS256'])
-	if decoded['auth_token'] == os.getenv("AUTH_TOKEN"):
+        conn = sqlite3.connect('reef_monitor.db')
+        cur = conn.cursor()
+        cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
+        rows = cur.fetchall()
+        conn.close()
+        if any(rows):
                 temp = TempSensor()
                 sensor = temp.sensor()
                 return jsonify(temp.get_reading())
@@ -90,11 +123,15 @@ def get_termperature_reading():
 @app.route("/api/turn_on_device", methods=["POST"])
 def turn_on_device():
 	try:
-		load_dotenv()
        	 	decoded = jwt.decode(request.args.get('token'), 'iliketurtles', algorithms=['HS256'])
-		if decoded['auth_token'] == os.getenv("AUTH_TOKEN"):
+        	conn = sqlite3.connect('reef_monitor.db')
+        	cur = conn.cursor()
+        	cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
+        	rows = cur.fetchall()
+        	conn.close()
+        	if any(rows):
 	                GPIO.setmode(GPIO.BCM)
-        	
+
                 	GPIO.setwarnings(False)
 
                 	GPIO.setup(decoded['pin_number'], GPIO.OUT) # GPIO Assign mode
@@ -112,11 +149,15 @@ def turn_on_device():
 @app.route("/api/turn_off_device", methods=["POST"])
 def turn_off_device():
 	try:
-		load_dotenv()
         	decoded = jwt.decode(request.args.get('token'), 'iliketurtles', algorithms=['HS256'])
-        	if decoded['auth_token'] == os.getenv("AUTH_TOKEN"):
+                conn = sqlite3.connect('reef_monitor.db')
+                cur = conn.cursor()
+                cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
+                rows = cur.fetchall()
+                conn.close()
+                if any(rows):
                 	GPIO.setmode(GPIO.BCM)
-        
+
                 	GPIO.setwarnings(False)
 
                 	GPIO.setup(decoded['pin_number'], GPIO.OUT) # GPIO Assign mode
