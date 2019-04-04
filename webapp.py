@@ -1,4 +1,5 @@
 #Author Nick Dos Santos
+#Clean up imports
 from flask import Flask
 from flask import request
 from flask import render_template
@@ -13,8 +14,50 @@ import RPi.GPIO as GPIO
 import jwt
 import os
 import model
-
+import ast
 import sqlite3
+
+import time
+import atexit
+import logging
+logging.basicConfig()
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
+
+#This method needs to change to check a sensors high and low range
+#if range is good dont send warning 
+#if over high or under low send warning to server.
+def print_temperature():
+    conn = sqlite3.connect('reef_monitor.db')
+    conn.text_factory = str
+    cur = conn.cursor()
+    cur.execute("SELECT token, temp_sensor_hash from users limit 1")
+    rows = cur.fetchall()
+    conn.close()
+    if any(rows): 
+	#print a temperature reading
+	temp = TempSensor()
+        user = rows[0]
+	body_dict = {
+	"reading_data": temp.get_reading(),
+	"auth_token": user[0],
+	"temp_sensor_hash": user[1] 
+	}
+	encoded_jwt = jwt.encode(body_dict, 'iliketurtles', algorithm='HS256')
+	URL = "http://46160b37.ngrok.io/api/readings/?token=" + encoded_jwt
+        r = requests.post(URL)
+    else:
+        print("Error could not find a user")
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=print_temperature, trigger="interval", seconds=15)
+scheduler.start()
+
+#Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'nickjds' 
@@ -55,7 +98,7 @@ def sync_sensors():
 		cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
 		rows = cur.fetchall()
 		if any(rows):
-			cur.execute("UPDATE users SET sensors  = ? WHERE token = ?", (str(json.dumps(decoded['sensors'])), decoded['auth_token']))
+			cur.execute("UPDATE users SET temp_sensor_hash  = ? WHERE token = ?", ((decoded['temp_sensor_hash']), decoded['auth_token']))
 			conn.commit()
 			conn.close()
 		return str(decoded)
