@@ -28,31 +28,61 @@ from apscheduler.schedulers.background import BackgroundScheduler
 #This method needs to change to check a sensors high and low range
 #if range is good dont send warning 
 #if over high or under low send warning to server.
-def print_temperature():
+def check_temperature():
     conn = sqlite3.connect('reef_monitor.db')
     conn.text_factory = str
     cur = conn.cursor()
-    cur.execute("SELECT token, temp_sensor_hash from users limit 1")
+    cur.execute("SELECT token, temp_sensor_hash, temp_sensor_high_value, temp_sensor_low_value from users limit 1")
     rows = cur.fetchall()
     conn.close()
     if any(rows): 
 	#print a temperature reading
 	temp = TempSensor()
         user = rows[0]
-	body_dict = {
-	"reading_data": temp.get_reading(),
-	"auth_token": user[0],
-	"temp_sensor_hash": user[1] 
-	}
-	encoded_jwt = jwt.encode(body_dict, 'iliketurtles', algorithm='HS256')
-	URL = "http://46160b37.ngrok.io/api/readings/?token=" + encoded_jwt
-        r = requests.post(URL)
+	reading = temp.get_reading()
+	if reading['farenheit'] >= user[2] or reading['farenheit'] <= user[3]:
+		body_dict = {
+		"reading_data": temp.get_reading(),
+		"auth_token": user[0],
+		"temp_sensor_hash": user[1] 
+		}
+		encoded_jwt = jwt.encode(body_dict, 'iliketurtles', algorithm='HS256')
+		URL = "http://b4f68cd5.ngrok.io/api/notify?token=" + encoded_jwt
+        	r = requests.get(URL)
+		print("NOTIFIED")
+		temp_check.pause()
+		time.sleep(1800)
+		temp_check.resume('temp_check')
     else:
         print("Error could not find a user")
 
+def record_temperature():
+	conn = sqlite3.connect('reef_monitor.db')
+	conn.text_factory = str
+	cur = conn.cursor()
+	cur.execute("SELECT token, temp_sensor_hash from users limit 1")
+	rows = cur.fetchall()
+	conn.close()
+	if any(rows):
+		temp = TempSensor()
+		user = rows[0]
+		reading = temp.get_reading()
+		body_dict = {
+                "reading_data": temp.get_reading(),
+                "auth_token": user[0],
+                "temp_sensor_hash": user[1] 
+                }
+		encoded_jwt = jwt.encode(body_dict, 'iliketurtles', algorithm='HS256')
+                URL = "http://b4f68cd5.ngrok.io/api/readings?token=" + encoded_jwt
+                r = requests.post(URL)
+		print("POSTED")
+	else: 
+		print("Error could not find a user")
+
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=print_temperature, trigger="interval", seconds=15)
+temp_check = scheduler.add_job(func=check_temperature, trigger="interval", seconds=5, id='temp_check')
+record_temperature = scheduler.add_job(func=record_temperature, trigger="interval", minutes=60, id='record_temperature')
 scheduler.start()
 
 #Shut down the scheduler when exiting the app
@@ -98,7 +128,7 @@ def sync_sensors():
 		cur.execute("SELECT token from users where token = ? limit 1", (decoded['auth_token'],))
 		rows = cur.fetchall()
 		if any(rows):
-			cur.execute("UPDATE users SET temp_sensor_hash  = ? WHERE token = ?", ((decoded['temp_sensor_hash']), decoded['auth_token']))
+			cur.execute("UPDATE users SET temp_sensor_hash  = ?, temp_sensor_high_value = ?, temp_sensor_low_value = ?  WHERE token = ?", (decoded['temp_sensor_hash'], decoded['high_value'], decoded['low_value'], decoded['auth_token']))
 			conn.commit()
 			conn.close()
 		return str(decoded)
@@ -119,13 +149,16 @@ def get_status_all():
                 	GPIO.setmode(GPIO.BCM)
                 	response = []
                 	for device in decoded['devices']:
-                        	GPIO.setup(device['pin_number'], GPIO.OUT) # GPIO Assign mode
-                        	device_status = GPIO.input(device['pin_number'])
-                        	if device_status == 1: 
-                                	device_status = True
-                        	else: 
-                                	device_status = False
-                        	device_obj = {'device': device['id'], 'status': device_status}
+				if device['pin_number']:
+                        		GPIO.setup(device['pin_number'], GPIO.OUT) # GPIO Assign mode
+                        		device_status = GPIO.input(device['pin_number'])
+                        		if device_status == 1: 
+                                		device_status = True
+                        		else: 
+                               			device_status = False
+                        	else:
+					device_status = False
+				device_obj = {'device': device['id'], 'status': device_status}
                         	response.append(device_obj)
 		return jsonify(response)
         except IOError as e:
